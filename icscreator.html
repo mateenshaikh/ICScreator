@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Recurring Schedule to ICS Viewer</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; }
+    .form-row, .date-row {
+      display: flex; align-items: center; gap: 15px;
+      margin-bottom: 10px; flex-wrap: wrap;
+    }
+    input[type="text"] { width: 100px; }
+    input[type="time"] { width: 80px; }
+    input[type="date"], select { width: 150px; }
+    .days { display: flex; align-items: center; gap: 5px; }
+    .days label { margin-left: 2px; margin-right: 5px; }
+    button { padding: 5px 10px; margin-top: 10px; }
+    textarea { width: 100%; height: 300px; margin-top: 20px; }
+    .action-buttons { display: flex; gap: 10px; margin-top: 10px; }
+  </style>
+</head>
+<body>
+  <h2>Schedule Entry Form</h2>
+
+  <form id="schedule-form">
+    <div class="date-row">
+      <label for="start-date">Start Date:</label>
+      <input type="date" id="start-date" name="start-date">
+      <label for="end-date">End Date:</label>
+      <input type="date" id="end-date" name="end-date">
+      <label for="timezone">Timezone:</label>
+      <select id="timezone">
+        <option value="America/Vancouver" selected>Pacific Time (America/Vancouver)</option>
+        <option value="America/New_York">Eastern Time (America/New_York)</option>
+        <option value="America/Chicago">Central Time (America/Chicago)</option>
+        <option value="America/Denver">Mountain Time (America/Denver)</option>
+        <option value="UTC">UTC</option>
+        <option value="Europe/London">London (Europe/London)</option>
+        <option value="Asia/Tokyo">Tokyo (Asia/Tokyo)</option>
+        <!-- Add more timezones as needed -->
+      </select>
+    </div>
+
+    <div class="form-row">
+      <label>Name:</label>
+      <input type="text" name="name">
+      <label>Start:</label>
+      <input type="time" name="start">
+      <label>End:</label>
+      <input type="time" name="end">
+      <label>Location:</label>
+      <input type="text" name="location">
+      <label>Days:</label>
+      <div class="days">
+        <input type="checkbox" value="MO"><label>MO</label>
+        <input type="checkbox" value="TU"><label>TU</label>
+        <input type="checkbox" value="WE"><label>WE</label>
+        <input type="checkbox" value="TH"><label>TH</label>
+        <input type="checkbox" value="FR"><label>FR</label>
+      </div>
+      <button type="button" class="delete-btn">Delete Row</button>
+    </div>
+  </form>
+
+  <button type="button" onclick="addRow()">Add Row</button>
+
+  <div class="action-buttons">
+    <button type="button" onclick="submitForm()">Generate ICS</button>
+    <button type="button" onclick="clearICS()">Clear ICS</button>
+  </div>
+
+  <textarea id="ics-output" readonly placeholder="ICS file content will appear here..."></textarea>
+
+  <button type="button" id="download-btn" onclick="downloadICS()" disabled>Download ICS</button>
+
+  <script>
+    function addRow() {
+      const form = document.getElementById('schedule-form');
+      const firstRow = form.querySelector('.form-row');
+      const newRow = firstRow.cloneNode(true);
+
+      newRow.querySelectorAll('input').forEach(input => {
+        if (input.type === 'checkbox') input.checked = false;
+        else input.value = '';
+      });
+
+      newRow.querySelector('.delete-btn').onclick = function () {
+        deleteRow(this);
+      };
+
+      form.appendChild(newRow);
+    }
+
+    function deleteRow(button) {
+      const row = button.closest('.form-row');
+      const form = document.getElementById('schedule-form');
+      if (form.querySelectorAll('.form-row').length > 1) {
+        form.removeChild(row);
+      } else {
+        alert("At least one row must remain.");
+      }
+    }
+
+    document.querySelector('.delete-btn').onclick = function () {
+      deleteRow(this);
+    };
+
+    function submitForm() {
+      const startDate = document.getElementById('start-date').value;
+      const endDate = document.getElementById('end-date').value;
+      const timezone = document.getElementById('timezone').value;
+      if (!startDate || !endDate) {
+        alert("Please enter both start and end dates.");
+        return;
+      }
+
+      const rows = document.querySelectorAll('.form-row');
+      let ics = "BEGIN:VCALENDAR\nVERSION:2.0\nPRODID:-//Copilot Generated//EN\n";
+      ics += `BEGIN:VTIMEZONE\nTZID:${timezone}\nBEGIN:STANDARD\nDTSTART:19710101T020000\nTZOFFSETFROM:-0700\nTZOFFSETTO:-0800\nTZNAME:STD\nEND:STANDARD\nBEGIN:DAYLIGHT\nDTSTART:19710101T020000\nTZOFFSETFROM:-0800\nTZOFFSETTO:-0700\nTZNAME:DST\nEND:DAYLIGHT\nEND:VTIMEZONE\n`;
+
+      rows.forEach((row, index) => {
+        const name = row.querySelector('input[name="name"]').value;
+        const startTime = row.querySelector('input[name="start"]').value;
+        const endTime = row.querySelector('input[name="end"]').value;
+        const location = row.querySelector('input[name="location"]').value;
+        const checkboxes = row.querySelectorAll('.days input[type="checkbox"]:checked');
+
+        const byDay = Array.from(checkboxes).map(cb => cb.value).join(',');
+
+        if (!name || !startTime || !endTime || !location || !byDay) return;
+
+        const dtStart = `${startDate.replace(/-/g, '')}T${startTime.replace(':', '')}00`;
+        const dtEnd = `${startDate.replace(/-/g, '')}T${endTime.replace(':', '')}00`;
+        const until = `${endDate.replace(/-/g, '')}T235900Z`;
+
+        ics += `BEGIN:VEVENT\n`;
+        ics += `UID:${index}-${dtStart}\n`;
+        ics += `DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z\n`;
+        ics += `DTSTART;TZID=${timezone}:${dtStart}\n`;
+        ics += `DTEND;TZID=${timezone}:${dtEnd}\n`;
+        ics += `RRULE:FREQ=WEEKLY;BYDAY=${byDay};UNTIL=${until}\n`;
+        ics += `SUMMARY:${name}\n`;
+        ics += `LOCATION:${location}\n`;
+        ics += `END:VEVENT\n`;
+      });
+
+      ics += "END:VCALENDAR";
+      const output = document.getElementById('ics-output');
+      output.value = ics;
+      document.getElementById('download-btn').disabled = ics.trim() === "";
+    }
+
+    function clearICS() {
+      document.getElementById('ics-output').value = "";
+      document.getElementById('download-btn').disabled = true;
+    }
+
+    function downloadICS() {
+      const content = document.getElementById('ics-output').value;
+      if (!content.trim()) return;
+
+      const blob = new Blob([content], { type: 'text/calendar' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'schedule.ics';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+  </script>
+</body>
+</html>
